@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -10,10 +12,15 @@ from pydantic import BaseModel
 
 app = FastAPI(title="游戏档案")
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(os.environ.get(
+    'DETECTIVE_BOARD_DATA',
+    Path(__file__).parent / "data"
+))
 DATA_DIR.mkdir(exist_ok=True)
-STATIC_DIR = Path(__file__).parent / "static"
-STATIC_DIR.mkdir(exist_ok=True)
+STATIC_DIR = Path(os.environ.get(
+    'DETECTIVE_BOARD_STATIC',
+    Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / "static"
+))
 
 # ---- 数据模型 ----
 
@@ -35,6 +42,9 @@ class ConnectionModel(BaseModel):
     color: str
     label: str
     font_size: int = 14
+    control_x: float | None = None
+    control_y: float | None = None
+    arrow_type: str = "single"
 
 class BoardData(BaseModel):
     name: str

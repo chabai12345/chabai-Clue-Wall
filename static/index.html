@@ -366,6 +366,8 @@ html, body { height: 100%; overflow: hidden; font-family: 'Noto Sans SC', 'Micro
 
 <!-- ====== 侧边栏 ====== -->
 <div class="sidebar" id="sidebar">
+    <div class="brand">线索墙</div>
+    <div class="sep"></div>
     <button class="btn-archive" onclick="showLoadModal()"><span class="s-icon">🎮</span>档案</button>
     <div class="sep"></div>
     <button class="btn-card" onclick="addCardPrompt()"><span class="s-icon">📇</span>卡片</button>
@@ -1397,9 +1399,9 @@ async function showLoadModal() {
                 loadBoard(b.name);
             });
             // 重命名
-            item.querySelector('.actions button:nth-child(2)').addEventListener('click', (e) => {
+            item.querySelector('.actions button:nth-child(2)').addEventListener('click', async (e) => {
                 e.stopPropagation();
-                var nn = prompt('新名称：', b.name);
+                var nn = await showPrompt('新名称：', b.name);
                 if (!nn || nn === b.name) return;
                 fetch('/api/boards/' + encodeURIComponent(b.name)).then(function(r) { return r.json(); }).then(function(d) {
                     d.name = nn;
@@ -1410,7 +1412,7 @@ async function showLoadModal() {
             });
             item.querySelector('.actions button:last-child').addEventListener('click', async (e) => {
                 e.stopPropagation();
-                if (!confirm(`删除「${b.name}」？`)) return;
+                if (!await showConfirm(`删除「${b.name}」？`)) return;
                 await fetch('/api/boards/' + encodeURIComponent(b.name), { method: 'DELETE' });
                 showLoadModal(); // 刷新列表
             });
@@ -1500,9 +1502,9 @@ async function loadBoard(name) {
 // ============================================================
 //  新建存档
 // ============================================================
-function newBoard() {
+async function newBoard() {
     closeModal('load-modal');
-    var name = prompt('存档名称：');
+    var name = await showPrompt('存档名称：');
     if (!name) return;
     state.cards.forEach(function(c) { if (c.el && c.el.parentNode) c.el.parentNode.removeChild(c.el); });
     state.connections.forEach(function(c) { if (c.lineEl) c.lineEl.remove(); if (c.labelEl) c.labelEl.remove(); });
@@ -1517,9 +1519,9 @@ function newBoard() {
 // ============================================================
 //  清空画板
 // ============================================================
-function clearBoard() {
+async function clearBoard() {
     if (state.cards.length === 0) return;
-    if (!confirm('清空所有卡片和连线？此操作不可撤销。')) return;
+    if (!await showConfirm('清空所有卡片和连线？此操作不可撤销。')) return;
     state.cards.forEach(c => { if (c.el && c.el.parentNode) c.el.parentNode.removeChild(c.el); });
     state.connections.forEach(c => {
         if (c.lineEl) c.lineEl.remove();
@@ -1658,9 +1660,9 @@ document.getElementById('detail-save-btn').addEventListener('click', () => {
 });
 
 // 在详情中删除卡片
-document.getElementById('detail-delete-btn').addEventListener('click', () => {
+document.getElementById('detail-delete-btn').addEventListener('click', async () => {
     if (!detailCardId) return;
-    if (!confirm('删除此卡片？')) return;
+    if (!await showConfirm('删除此卡片？')) return;
     removeCard(detailCardId);
     closeDetailModal();
 });
@@ -1727,37 +1729,114 @@ function showToast(msg) {
     }, 2000);
 }
 
+// ── 自定义确认框（替代 confirm） ─────────────────
+function showConfirm(msg) {
+    return new Promise(function(resolve) {
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);backdrop-filter:blur(2px);';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:rgba(30,25,20,0.97);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:24px 28px;min-width:280px;max-width:400px;box-shadow:0 12px 40px rgba(0,0,0,0.6);text-align:center;';
+        var p = document.createElement('p');
+        p.style.cssText = 'color:#eee;font-size:14px;margin-bottom:20px;line-height:1.5;word-break:break-word;';
+        p.textContent = msg;
+        var actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:10px;justify-content:center;';
+        var btnCancel = document.createElement('button');
+        btnCancel.textContent = '取消';
+        btnCancel.style.cssText = 'padding:8px 20px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:#aaa;font-size:13px;cursor:pointer;font-family:inherit;';
+        var btnOk = document.createElement('button');
+        btnOk.textContent = '确定';
+        btnOk.style.cssText = 'padding:8px 20px;border-radius:6px;border:none;background:#d4a87a;color:#1a1510;font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;';
+        function cleanup() { overlay.remove(); }
+        btnCancel.onclick = function() { cleanup(); resolve(false); };
+        btnOk.onclick = function() { cleanup(); resolve(true); };
+        overlay.onclick = function(e) { if (e.target === overlay) { cleanup(); resolve(false); } };
+        actions.appendChild(btnCancel);
+        actions.appendChild(btnOk);
+        box.appendChild(p);
+        box.appendChild(actions);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        btnOk.focus();
+    });
+}
+
+// ── 自定义输入框（替代 prompt） ─────────────────
+function showPrompt(msg, defaultValue) {
+    return new Promise(function(resolve) {
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);backdrop-filter:blur(2px);';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:rgba(30,25,20,0.97);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:24px 28px;min-width:300px;max-width:400px;box-shadow:0 12px 40px rgba(0,0,0,0.6);text-align:center;';
+        var p = document.createElement('p');
+        p.style.cssText = 'color:#eee;font-size:14px;margin-bottom:12px;text-align:left;';
+        p.textContent = msg;
+        var input = document.createElement('input');
+        input.style.cssText = 'width:100%;padding:8px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#eee;font-size:13px;outline:none;font-family:inherit;box-sizing:border-box;margin-bottom:16px;';
+        if (defaultValue !== undefined) input.value = defaultValue;
+        var actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:10px;justify-content:center;';
+        var btnCancel = document.createElement('button');
+        btnCancel.textContent = '取消';
+        btnCancel.style.cssText = 'padding:8px 20px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:#aaa;font-size:13px;cursor:pointer;font-family:inherit;';
+        var btnOk = document.createElement('button');
+        btnOk.textContent = '确定';
+        btnOk.style.cssText = 'padding:8px 20px;border-radius:6px;border:none;background:#d4a87a;color:#1a1510;font-size:13px;cursor:pointer;font-weight:600;font-family:inherit;';
+        function cleanup() { overlay.remove(); }
+        btnCancel.onclick = function() { cleanup(); resolve(null); };
+        btnOk.onclick = function() { cleanup(); resolve(input.value); };
+        overlay.onclick = function(e) { if (e.target === overlay) { cleanup(); resolve(null); } };
+        input.onkeydown = function(e) { if (e.key === 'Enter') { cleanup(); resolve(input.value); } if (e.key === 'Escape') { cleanup(); resolve(null); } };
+        actions.appendChild(btnCancel);
+        actions.appendChild(btnOk);
+        box.appendChild(p);
+        box.appendChild(input);
+        box.appendChild(actions);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        input.focus();
+        if (defaultValue !== undefined) input.select();
+    });
+}
+
 // ============================================================
 //  初始化
 // ============================================================
 applyTransform();
 updateSvgSize();
 
-// 初始示例卡片
-addCard('character', 60, 80, true);
-addCard('item', 400, 60, true);
-addCard('location', 200, 300, true);
-const initCards = state.cards.splice(0, 3);
-initCards.forEach((c, i) => {
-    state.cards.push(c);
-    c.el.style.zIndex = state.nextZ++;
-});
-initCards[0].title = '👤 主角';
-initCards[0].el.querySelector('.name').textContent = initCards[0].title;
-initCards[1].title = '📦 关键物品';
-initCards[1].el.querySelector('.name').textContent = initCards[1].title;
-initCards[2].title = '📍 主城';
-initCards[2].el.querySelector('.name').textContent = initCards[2].title;
-
-// 初始连线
-createConnection(initCards[0].id, initCards[1].id);
-createConnection(initCards[0].id, initCards[2].id);
-
-// 自动保存为"档案"
-setTimeout(function() { state.boardName = '档案'; saveBoardAs('档案'); }, 200);
+// 初始加载：优先读取"母鸡卡"存档
+(async function initBoard() {
+    try {
+        await loadBoard('母鸡卡');
+        state.boardName = '母鸡卡';
+        // 当前存档名为"母鸡卡"，读盘时已自动保存上个存档
+    } catch(e) {
+        // 没有存档，创建示例卡片
+        addCard('character', 60, 80, true);
+        addCard('item', 400, 60, true);
+        addCard('location', 200, 300, true);
+        const initCards = state.cards.splice(0, 3);
+        initCards.forEach((c, i) => {
+            state.cards.push(c);
+            c.el.style.zIndex = state.nextZ++;
+        });
+        initCards[0].title = '👤 主角';
+        initCards[0].el.querySelector('.name').textContent = initCards[0].title;
+        initCards[1].title = '📦 关键物品';
+        initCards[1].el.querySelector('.name').textContent = initCards[1].title;
+        initCards[2].title = '📍 主城';
+        initCards[2].el.querySelector('.name').textContent = initCards[2].title;
+        createConnection(initCards[0].id, initCards[1].id);
+        createConnection(initCards[0].id, initCards[2].id);
+        // 自动保存为"档案"
+        setTimeout(function() { state.boardName = '档案'; saveBoardAs('档案'); }, 200);
+    }
+})();
 
 // 修复 ID 计数器
 state.idCounter = Math.max(state.idCounter, 100);
+
 </script>
 </body>
 </html>
